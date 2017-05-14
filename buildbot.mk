@@ -66,11 +66,14 @@ docs_source_dir = ${top_src_dir}/docs
 docs_private_source_dir = ${private_dir}/docs
 docs_build_dir = ${top_src_dir}/_build/docs-build
 
+PLUGIN_TARGET_DIR="${HOME}/Library/Application Support/FileMaker/FileMaker Pro Advanced/15.0/Extensions/"
+
 ifeq ($(BUILD_PLATFORM),mac)
   LIVECODE = $(bin_dir)/LiveCode-Community.app/Contents/MacOS/LiveCode-Community
   buildtool_platform = mac
   UPLOAD_ENABLE_CHECKSUM ?= no
   UPLOAD_RELEASE_NOTES ?= no
+  FM_PLUGIN_DEST=$(HOME)/Library/Application Support/FileMaker/FileMaker Pro Advanced/15.0/Extensions
 else ifeq ($(BUILD_PLATFORM),linux-x86)
   LIVECODE = $(bin_dir)/LiveCode-Community
   buildtool_platform = linux
@@ -205,6 +208,7 @@ distmac-bundle-business:
 # Upload the release notes if we are on Linux
 dist-upload-files.txt sha1sum.txt:
 	set -e; \
+	ls -l;
 	find . -maxdepth 1 -name 'LiveCode*-*-Mac.dmg' \
 	                -o -name 'LiveCode*Installer-*-Windows.exe' \
 	                -o -name 'LiveCode*Installer-*-Linux.*' \
@@ -214,6 +218,7 @@ dist-upload-files.txt sha1sum.txt:
 	                -o -name 'LiveCode*Docs-*.zip' \
 	                -o -name '*-bin.tar.xz' \
 	                -o -name '*-bin.tar.bz2' \
+	                -o -name 'LiveCodeforFM-*.fmp12' \
 	  > dist-upload-files.txt; \
 	if test "${UPLOAD_RELEASE_NOTES}" = "yes"; then \
 		find . -maxdepth 1 -name 'LiveCodeNotes*.pdf' >> dist-upload-files.txt; \
@@ -253,11 +258,23 @@ dist-upload: dist-upload-files.txt dist-upload-mkdir
 # resulting archive gets transferred to a Mac for signing and
 # conversion to a DMG.
 distmac-archive:
+	set -e; \
 	find . -maxdepth 1 -name 'LiveCode*Installer-*-Mac.app' -print0 \
-	    | xargs -0 tar -Jcvf mac-installer.tar.xz
+	    | xargs -0 tar -cvf mac-installer.tar; \
+	cd mac-bin; \
+	find . -maxdepth 1 -name 'livecodeforfm-*.fmplugin' -print0 \
+	    | xargs -0 tar --append --file=../mac-installer.tar; \
+	cd ..; \
+	bzip2 -c mac-installer.tar > mac-installer.tar.xz; \
+	ls -l
 
 distmac-extract:
-	tar -xvf mac-installer.tar.xz
+	set -e; \
+	ls -l; \
+	tar -xvf mac-installer.tar.xz; \
+	find . -maxdepth 1 -name 'livecodeforfm-*.fmplugin' -print0 \ 
+		-exec cp -r '{}' '$(PLUGIN_TARGET_DIR)' \;;\
+	$(buildtool_command) --platform mac --platform win --stage fmpackage --debug
 
 # Final installer creation for Mac
 distmac-disk-%: distmac-bundle-%

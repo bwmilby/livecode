@@ -101,6 +101,14 @@ on builderBuild pWhich, pPlatforms, pEdition, pType
          put builderGetBuildNumber() into tBuildNumber
          dispatch "archiveBuilderRun" to stack builderArchiveBuilderStack() with tVersion, tBuildNumber, pType
          break
+      case "FMPackage"
+         local tGitRevision, tOutputFolder, tPrivateRepo
+         put builderOutputFolder() into tOutputFolder
+         put builderGetGitRevision() into tGitRevision
+         put builderPrivateRepoFolder() into tPrivateRepo
+         repeat for each line tPlatform in pPlatforms
+            dispatch "fmPackageBuilderRun" to stack builderFMPackageBuilderStack() with tPlatform, tPrivateRepo, tOutputFolder, tGitRevision
+         end repeat
    end switch
    	
    builderFinalize	
@@ -392,6 +400,10 @@ function builderArchiveBuilderStack
    return builderSystemPrivateFolder() & slash & "archive_builder.livecodescript"
 end builderArchiveBuilderStack
 
+function builderFMPackageBuilderStack
+   return builderSystemPrivateFolder() & slash & "package_solution.livecodescript"
+end builderFMPackageBuilderStack
+
 function builderModuleInterfaceFolder
    builderFetchEngine "", "macosx"
    return the result & slash & "modules" & slash & "lci"
@@ -483,6 +495,12 @@ function builderGetBuildNumber
    put tVersionFile["BUILD_REVISION"] into tVersion   
    return tVersion
 end builderGetBuildNumber
+
+////////////////////////////////////////////////////////////////////////////////
+
+function builderGetGitRevision
+	return shell("git --git-dir=../.git rev-parse --short HEAD")
+end builderGetGitRevision
 
 ////////////////////////////////////////////////////////////////////////////////
 
