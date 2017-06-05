@@ -32,7 +32,6 @@
 				'src/cachetable.cpp',
 				'src/context.cpp',
 				'src/coretext-skia.cpp',
-				'src/directwrite-skia.cpp',
 				'src/image.cpp',
 				'src/lnxtext.cpp',
 				'src/harfbuzztext.cpp',
@@ -41,6 +40,7 @@
 				'src/region.cpp',
 				'src/spread.cpp',
 				'src/utils.cpp',
+				'src/w32text.cpp',
 				'src/SkStippleMaskFilter.cpp',
 				'src/legacygradients.cpp',
 			],
@@ -53,15 +53,6 @@
 						'sources!':
 						[
 							'src/coretext-skia.cpp',
-						],
-					},
-				],
-				[
-					'OS != "win"',
-					{
-						'sources!':
-						[
-							'src/directwrite-skia.cpp',
 						],
 					},
 				],
