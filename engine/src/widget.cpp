@@ -668,6 +668,42 @@ bool MCWidget::setcustomprop(MCExecContext& ctxt, MCNameRef p_set_name, MCNameRe
         !MCExtensionConvertFromScriptType(ctxt, t_set_type, InOut(t_value)))
     {
         CatchError(ctxt);
+        
+        Exec_errors t_error;
+        bool t_throw = false;
+        
+        MCResolvedTypeInfo t_resolved_type;
+        if (!MCTypeInfoResolve(t_set_type, t_resolved_type))
+            return false;
+        
+        if ( t_resolved_type . named_type == kMCBooleanTypeInfo)
+        {
+            t_error = EE_PROPERTY_NAB;
+            t_throw = true;
+        }
+        else if (t_resolved_type . named_type == kMCNumberTypeInfo)
+        {
+            t_error = EE_PROPERTY_NAN;
+            t_throw = true;
+        }
+        else if (t_resolved_type . named_type == kMCStringTypeInfo)
+        {
+            t_error = EE_PROPERTY_NAS;
+            t_throw = true;
+        }
+        else if (t_resolved_type . named_type == kMCArrayTypeInfo || t_resolved_type . named_type == kMCProperListTypeInfo)
+        {
+            t_error = EE_PROPERTY_NOTANARRAY;
+            t_throw = true;
+        }
+        else if (t_resolved_type . named_type == kMCDataTypeInfo)
+        {
+            t_error = EE_PROPERTY_NOTADATA;
+            t_throw = true;
+        }
+        
+        if (t_throw)
+            ctxt . LegacyThrow(t_error);
         return false;
     }
     
@@ -810,7 +846,12 @@ IO_stat MCWidget::save(IO_handle p_stream, uint4 p_part, bool p_force_ext, uint3
     // Make the widget generate a rep.
 	MCAutoValueRef t_rep;
 	if (m_widget != nil)
+    {
 		MCWidgetOnSave(m_widget, &t_rep);
+        // A widget might not have an OnSave handler (e.g. colorswatch widget)
+        if (*t_rep == nil)
+            t_rep = kMCNull;
+    }
 	else if (m_rep != nil)
 		t_rep = m_rep;
 	else

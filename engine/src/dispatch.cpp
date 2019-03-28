@@ -367,14 +367,32 @@ void MCDispatch::removestack(MCStack *sptr)
 
 void MCDispatch::destroystack(MCStack *sptr, Boolean needremove)
 {
+    /* Make sure no messages are sent when destroying the given stack as this
+     * destruction method is only ever used for stacks which are not-yet-alive
+     * (e.g. failed to deserialize) or in restricted contexts (e.g. licensing
+     * dialog on startup). */
+    Boolean oldstate = MClockmessages;
+    MClockmessages = True;
+    
 	if (needremove)
     {
         MCStack *t_substacks = sptr -> getsubstacks();
-        while (t_substacks)
+        while(t_substacks != nullptr)
         {
+            /* The MCStack::dodel() method removes the stack from its mainstack 
+             * so we must explicitly delete it explicitly. Note that there is
+             * no need to scheduledelete() in this case as destroystack() is
+             * only called when it is known that no script is running from the
+             * stack. */
             t_substacks -> dodel();
+            delete t_substacks;
+            
+            /* Refetch the substacks list - the substack we just processed will
+             * have been removed from it. */
             t_substacks = sptr -> getsubstacks();
         }
+        
+        /* Release any references to the mainstack */
         sptr -> dodel();
     }
 	if (sptr == MCstaticdefaultstackptr)
@@ -383,9 +401,13 @@ void MCDispatch::destroystack(MCStack *sptr, Boolean needremove)
 		MCdefaultstackptr = MCstaticdefaultstackptr;
 	if (MCacptr && MCacptr->getmessagestack() == sptr)
 		MCacptr->setmessagestack(NULL);
-	Boolean oldstate = MClockmessages;
-	MClockmessages = True;
+    
+    /* Delete the stack explicitly. Note that there is no need to use
+     * scheduledelete here as destroystack() is only called when it is known
+     * that no script is running from the stack. */
 	delete sptr;
+    
+    /* Restore the previous message lock state. */
 	MClockmessages = oldstate;
 }
 
@@ -1705,7 +1727,7 @@ MCDragAction MCDispatch::wmdragdrop(Window w)
 		dodrop(false);
 
     // The drag operation has ended. Remove the drag board contents.
-	MCmousestackptr = nil;
+    MCmousestackptr = findstackd(w);
     MCdragboard->Clear();
 	m_drag_target = false;
 
@@ -2050,7 +2072,7 @@ check:
             MCU_geturl(*ctxt, MCNameGetString(p_name), &t_output);
             // SN-2014-05-09 [[ Bug 12409 ]] Fields in LC 7 fail to display binfile url imagesource
             // isempty is not what we want to use, since it returns false for a cleared result
-			if (MCresult->isclear())
+			if (MCresult->isclear() || MCresult->isempty())
             {
                 MCAutoDataRef t_data;
 

@@ -609,8 +609,7 @@ public class Engine extends View implements EngineApi
 		
 		// HH-2017-01-18: [[ Bug 18058 ]] Fix keyboard not show in landscape orientation
         imm.showSoftInput(this, InputMethodManager.SHOW_FORCED);
-		updateKeyboardVisible(true);
-    }
+	}
 
     public void hideKeyboard()
     {
@@ -622,8 +621,7 @@ public class Engine extends View implements EngineApi
 			imm.restartInput(this);
 		
         imm.hideSoftInputFromWindow(getWindowToken(), 0);
-		updateKeyboardVisible(false);
-    }
+	}
 
 	public void resetKeyboard()
 	{
@@ -1256,7 +1254,7 @@ public class Engine extends View implements EngineApi
 		getLocationOnScreen(t_origin);
 		
 		// We have new values and the keyboard isn't showing so update any sizes we don't already know
-		if (p_update && !m_keyboard_visible)
+		if (p_update && !keyboardIsVisible())
 		{
 			t_working_rect = new Rect(t_origin[0], t_origin[1], t_origin[0] + p_new_width, t_origin[1] + p_new_height);
 			
@@ -1394,18 +1392,42 @@ public class Engine extends View implements EngineApi
 	private boolean m_orientation_sizechange = false;
 	
 	private boolean m_keyboard_visible = false;
+    
+    boolean keyboardIsVisible()
+    {
+        // status bar height
+        int t_status_bar_height = 0;
+        int t_resource_id = getResources().getIdentifier("status_bar_height", "dimen", "android");
+        if (t_resource_id > 0)
+        {
+            t_status_bar_height = getResources().getDimensionPixelSize(t_resource_id);
+        }
+        
+        // display window size for the app layout
+        Rect t_app_rect = new Rect();
+        getActivity().getWindow().getDecorView().getWindowVisibleDisplayFrame(t_app_rect);
+        
+        int t_screen_height = ((LiveCodeActivity)getContext()).s_main_layout.getRootView().getHeight();
+        
+        // keyboard height equals (screen height - (user app height + status))
+        int t_keyboard_height = t_screen_height - (t_app_rect.height() + t_status_bar_height);
+        
+        return t_keyboard_height > 0;
+    }
 	
-	void updateKeyboardVisible(boolean p_visible)
+	void updateKeyboardVisible()
 	{
-		if (p_visible == m_keyboard_visible)
+        boolean t_visible = keyboardIsVisible();
+        
+		if (t_visible == m_keyboard_visible)
 			return;
 		
 		// Log.i(TAG, "updateKeyboardVisible(" + p_visible + ")");
 		
-		m_keyboard_visible = p_visible;
+		m_keyboard_visible = t_visible;
 		
 		// IM-2013-11-15: [[ Bug 10485 ]] Notify engine when keyboard visiblity changes
-		if (p_visible)
+		if (t_visible)
 			doKeyboardShown(0);
 		else
 			doKeyboardHidden();
@@ -1424,23 +1446,6 @@ public class Engine extends View implements EngineApi
 	protected void onSizeChanged(int w, int h, int oldw, int oldh)
 	{
 		// Log.i(TAG, "onSizeChanged({" + w + "x" + h + "}, {" + oldw + ", " + oldh + "})");
-		
-		// status bar height
-		int t_status_bar_height = 0;
-		int t_resource_id = getResources().getIdentifier("status_bar_height", "dimen", "android");
-		if (t_resource_id > 0)
-		{
-			t_status_bar_height = getResources().getDimensionPixelSize(t_resource_id);
-		}
-		
-		// display window size for the app layout
-		Rect t_app_rect = new Rect();
-		getActivity().getWindow().getDecorView().getWindowVisibleDisplayFrame(t_app_rect);
-		
-		// keyboard height equals (screen height - (user app height + status))
-		int t_keyboard_height = getContainer().getRootView().getHeight() - (t_app_rect.height() + t_status_bar_height);
-		
-		updateKeyboardVisible(t_keyboard_height > 0);
 		
 		Rect t_rect;
 		t_rect = null;
@@ -1639,7 +1644,8 @@ public class Engine extends View implements EngineApi
 	public void launchUrl(String p_url)
 	{
 		String t_type = null;
-		if (p_url.startsWith("file:"))
+        Uri t_uri;
+		if (p_url.startsWith("file:") || p_url.startsWith("binfile:"))
 		{
 			try
 			{
@@ -1652,13 +1658,29 @@ public class Engine extends View implements EngineApi
 
 			if (t_type == null)
 				t_type = URLConnection.guessContentTypeFromName(p_url);
+            
+            // Store the actual path
+            String t_path;
+            t_path = p_url.substring(p_url.indexOf(":") + 1);
+            
+            // In the new Android permissions model, "file://" and "binfile://" URIs are not allowed
+            // for sharing files with other apps. They need to be replaced with "content://" URI and
+            // use a FileProvider instead
+            t_uri = FileProvider.getProvider(getContext()).addPath(t_path, t_path, t_type, false, ParcelFileDescriptor.MODE_READ_ONLY);
 		}
-
+        else
+        {
+            t_uri = Uri.parse(p_url);
+        }
+        
 		Intent t_view_intent = new Intent(Intent.ACTION_VIEW);
+        
 		if (t_type != null)
-			t_view_intent.setDataAndType(Uri.parse(p_url), t_type);
+			t_view_intent.setDataAndType(t_uri, t_type);
 		else
-			t_view_intent.setData(Uri.parse(p_url));
+			t_view_intent.setData(t_uri);
+        
+        t_view_intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
 		((LiveCodeActivity)getContext()).startActivityForResult(t_view_intent, LAUNCHURL_RESULT);
 	}
 

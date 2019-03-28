@@ -341,8 +341,11 @@ command revDoSaveAsStandalone pStack, pFolder, pSettings, @xStandalonePaths
          else
             put tOutputFolder into tTargetFolder
          end if
+         
          -- Make sure folder exists
-         revSBEnsureFolder tTargetFolder
+         if tStandaloneSettingsA[tPlatform] then
+            revSBEnsureFolder tTargetFolder
+         end if
          
          switch tPlatform
             case "iOS"
@@ -627,8 +630,12 @@ command revSaveAsMacStandalone pStack, pRestoreFileName, pFolder, @xStandalonePa
    
    -- OK-2008-03-24 : Bug 6171. Restructured a little to ensure that the icon can be either relative or absolute.
    -- If the icon cannot be found at the exact location, assume its relative to the stack and put the stack path before it.
-   if there is no file sStandaloneSettingsA["OSX,iconFile"] and sStandaloneSettingsA["OSX,iconFile"] is not empty then
-      put tStackPath & "/" before sStandaloneSettingsA["OSX,iconFile"]
+   if sStandaloneSettingsA["OSX,iconFile"] is not empty then
+      if there is no file sStandaloneSettingsA["OSX,iconFile"] or \
+            (the folder is tStackPath and \
+            there is a file (the folder & "/" & sStandaloneSettingsA["OSX,iconFile"])) then
+         put tStackPath & "/" before sStandaloneSettingsA["OSX,iconFile"]
+      end if
    end if
    
    -- If the icon cannot be found (and we are building for OS X and its not empty) then add a warning.
@@ -704,7 +711,7 @@ command revSaveAsMacStandalone pStack, pRestoreFileName, pFolder, @xStandalonePa
       
       -- Add a random uuid to use in the executable's uuid load command.
       put uuid() into tDeployInfo["uuid"]
-
+      
       revStandaloneDeployWithParams tTarget, tStackSourceFile, tDeployInfo
       
       -- Make sure we finish off the bundle contents
@@ -910,6 +917,7 @@ command revSaveAsLinuxStandalone pStack, pRestoreFileName, pFolder, @xStandalone
    set the itemDelimiter to slash
    put the effective filename of stack pStack into tOriginalFileName
    put item 1 to -2 of tOriginalFileName into tStackPath
+   set the itemDelimiter to comma
    
    -- keep a copy of the standalone settings to restore after each build
    local tStandaloneSettingsA
@@ -928,7 +936,7 @@ command revSaveAsLinuxStandalone pStack, pRestoreFileName, pFolder, @xStandalone
       else
          put "x86" into tArch
       end if
-      revStandalonePreBuild pStack, pFolder, "linux", tArch, tStackName, tStackFileList     
+      revStandalonePreBuild pStack, char 1 to -2 of tDirectory, "linux", tArch, tStackName, tStackFileList     
       if the result is not empty then 
          return the result
       end if
@@ -2296,7 +2304,7 @@ private command revCopyExternals pPlatform, pStackFilePath, pEnginePath, pStanda
    put sStandaloneSettingsA["scriptLibraries"] into tScriptLibraries
    
    local tAppBundle, tCEFFramework, tCEFResources, tCEFDest
-
+   
    revStandaloneProgress "Copying externals..."
    
    lock screen
@@ -2328,6 +2336,9 @@ private command revCopyExternals pPlatform, pStackFilePath, pEnginePath, pStanda
          revStandaloneAddWarning tPlatform && tArch & ", Support, revpdfprinter" & tExtension && the result & ": required for PDF printing."
       else
          --revAddExternal "revpdfprinter"
+         local tRevPdfPrinterExecutable
+         put tCurrentLocation & "/revpdfprinter.bundle/Contents/MacOS/revpdfprinter" into tRevPdfPrinterExecutable
+         revSBRemoveUnneededSlicesFromMacCode tRevPdfPrinterExecutable, sStandaloneSettingsA
       end if
    end if
    
@@ -2338,6 +2349,7 @@ private command revCopyExternals pPlatform, pStackFilePath, pEnginePath, pStanda
          revStandaloneAddWarning tPlatform && tArch & ", Support, revsecurity" & tSharedExtension && the result & ": required for SSL."
       else
          --revAddExternal "revsecurity"
+         revSBRemoveUnneededSlicesFromMacCode tCurrentLocation & "/revsecurity.dylib", sStandaloneSettingsA
       end if
    end if
    
@@ -2554,7 +2566,17 @@ command revRedirectMacOSResourcesRecurse pSourceFolder, pTargetFolder
       if revRedirectMacOSResourcesIsExecutable(pSourceFolder & slash & tFile) then
          next repeat
       end if
-      rename (pSourceFolder & slash & tFile) to (pTargetFolder & slash & tFile)
+      switch the platform
+         case "macos"
+         case "linux"
+            get shell("mv" && quote & pSourceFolder & slash & tFile & quote && \
+                  quote & pTargetFolder & slash & tFile & quote)
+            break
+         case "win32"
+            --following line does not work properly for symlink folders
+            rename (pSourceFolder & slash & tFile) to (pTargetFolder & slash & tFile)
+            break
+      end switch
    end repeat
    
    local tFolder
